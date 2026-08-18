@@ -101,9 +101,48 @@ if st.button("🚀 Generate Candidate Prep Guide", type="primary"):
                     contents=prompt
                 )
 
-                st.success("Guide Generated Successfully!")
-                st.markdown("---")
-                st.markdown(response.text)
+                from fpdf import FPDF
+
+# Function to convert markdown text to PDF bytes
+def create_pdf(text_content):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_font("Helvetica", size=11)
+    
+    # Clean non-latin symbols for basic PDF rendering
+    clean_text = text_content.encode('latin-1', 'replace').decode('latin-1')
+    
+    for line in clean_text.split('\n'):
+        pdf.multi_cell(0, 8, txt=line)
+        
+    return bytes(pdf.output())
+
+# Display the output and provide download buttons
+st.success("Guide Generated Successfully!")
+st.markdown("---")
+st.markdown(response.text)
+
+# Download Section
+pdf_data = create_pdf(response.text)
+
+col_dl1, col_dl2 = st.columns(2)
+with col_dl1:
+    st.download_button(
+        label="📥 Download as PDF",
+        data=pdf_data,
+        file_name=f"{role_title.replace(' ', '_')}_Prep_Guide.pdf",
+        mime="application/pdf",
+        type="primary"
+    )
+
+with col_dl2:
+    st.download_button(
+        label="📄 Download as Text / Markdown",
+        data=response.text,
+        file_name=f"{role_title.replace(' ', '_')}_Prep_Guide.md",
+        mime="text/markdown"
+    )
                 
             except Exception as e:
                 st.error(f"Error generating guide: {str(e)}")

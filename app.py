@@ -3,6 +3,7 @@ import pypdf
 import docx
 from google import genai
 from fpdf import FPDF
+import time
 
 # Page Configuration
 st.set_page_config(page_title="Candidate Prep Guide Generator", page_icon="🎯", layout="wide")
@@ -114,37 +115,53 @@ if st.button("🚀 Generate Candidate Prep Guide", type="primary"):
                 Provide 3 high-leverage practice questions with key answer guidance based on the hiring rubric.
                 """
 
-                response = client.models.generate_content(
-                    model='gemini-1.5-flash',
-                    contents=prompt
-                )
+                # Automatic retry with fallback models if 503 occurs
+                candidate_models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
+                response = None
+                last_err = None
 
-                # Display the output
-                st.success("Guide Generated Successfully!")
-                st.markdown("---")
-                st.markdown(response.text)
+                for model_name in candidate_models:
+                    try:
+                        response = client.models.generate_content(
+                            model=model_name,
+                            contents=prompt
+                        )
+                        if response and response.text:
+                            break
+                    except Exception as err:
+                        last_err = err
+                        time.sleep(1) # Brief pause before trying next model
+                        continue
 
-                # Prepare PDF Download
-                pdf_data = create_pdf(response.text)
+                if not response or not response.text:
+                    st.error("Google's API servers are currently experiencing high global traffic. Please wait 30 seconds and click Generate again.")
+                else:
+                    # Display the output
+                    st.success("Guide Generated Successfully!")
+                    st.markdown("---")
+                    st.markdown(response.text)
 
-                # Render Download Buttons Side-by-Side
-                col_dl1, col_dl2 = st.columns(2)
-                with col_dl1:
-                    st.download_button(
-                        label="📥 Download as PDF",
-                        data=pdf_data,
-                        file_name=f"{role_title.replace(' ', '_')}_Prep_Guide.pdf",
-                        mime="application/pdf",
-                        type="primary"
-                    )
+                    # Prepare PDF Download
+                    pdf_data = create_pdf(response.text)
 
-                with col_dl2:
-                    st.download_button(
-                        label="📄 Download as Text / Markdown",
-                        data=response.text,
-                        file_name=f"{role_title.replace(' ', '_')}_Prep_Guide.md",
-                        mime="text/markdown"
-                    )
+                    # Render Download Buttons Side-by-Side
+                    col_dl1, col_dl2 = st.columns(2)
+                    with col_dl1:
+                        st.download_button(
+                            label="📥 Download as PDF",
+                            data=pdf_data,
+                            file_name=f"{role_title.replace(' ', '_')}_Prep_Guide.pdf",
+                            mime="application/pdf",
+                            type="primary"
+                        )
+
+                    with col_dl2:
+                        st.download_button(
+                            label="📄 Download as Text / Markdown",
+                            data=response.text,
+                            file_name=f"{role_title.replace(' ', '_')}_Prep_Guide.md",
+                            mime="text/markdown"
+                        )
 
             except Exception as e:
                 st.error(f"Error generating guide: {str(e)}")

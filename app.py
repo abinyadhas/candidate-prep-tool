@@ -2,6 +2,7 @@ import streamlit as st
 import pypdf
 import docx
 from google import genai
+from fpdf import FPDF
 
 # Page Configuration
 st.set_page_config(page_title="Candidate Prep Guide Generator", page_icon="🎯", layout="wide")
@@ -9,12 +10,15 @@ st.set_page_config(page_title="Candidate Prep Guide Generator", page_icon="🎯"
 st.title("🎯 AI Candidate Prep Guide Generator")
 st.write("Upload the Job Description, Hiring Guide, and past scorecards to automatically generate a tailored candidate prep guide.")
 
-# Sidebar for API Key
-st.sidebar.header("Configuration")
-api_key = st.sidebar.text_input("Enter Gemini API Key (Free from AI Studio):", type="password")
-st.sidebar.info("Get a free API key at: https://aistudio.google.com/")
+# Fetch API Key (Checks Streamlit Secrets first, falls back to sidebar input)
+api_key = st.secrets.get("GEMINI_API_KEY")
 
-# Helper function to extract text from files
+if not api_key:
+    st.sidebar.header("Configuration")
+    api_key = st.sidebar.text_input("Enter Gemini API Key:", type="password")
+    st.sidebar.info("Get a free API key at: https://aistudio.google.com/")
+
+# Helper function to extract text from uploaded files
 def extract_text(uploaded_file):
     if uploaded_file is None:
         return ""
@@ -34,6 +38,20 @@ def extract_text(uploaded_file):
         
     return text
 
+# Function to convert generated text into a downloadable PDF
+def create_pdf(text_content):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_font("Helvetica", size=11)
+    
+    clean_text = text_content.encode('latin-1', 'replace').decode('latin-1')
+    
+    for line in clean_text.split('\n'):
+        pdf.multi_cell(0, 8, txt=line)
+        
+    return bytes(pdf.output())
+
 # Main Form
 role_title = st.text_input("Role Title", placeholder="e.g., Product Marketing Manager")
 
@@ -51,7 +69,7 @@ with col3:
 # Generate Button
 if st.button("🚀 Generate Candidate Prep Guide", type="primary"):
     if not api_key:
-        st.error("Please enter a free Gemini API Key in the left sidebar to continue.")
+        st.error("Please enter a free Gemini API Key to continue.")
     elif not role_title or not jd_file or not hg_file:
         st.warning("Please fill in the Role Title and upload both the Job Description and Hiring Guide.")
     else:
@@ -101,48 +119,32 @@ if st.button("🚀 Generate Candidate Prep Guide", type="primary"):
                     contents=prompt
                 )
 
-                from fpdf import FPDF
+                # Display the output
+                st.success("Guide Generated Successfully!")
+                st.markdown("---")
+                st.markdown(response.text)
 
-# Function to convert markdown text to PDF bytes
-def create_pdf(text_content):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.set_font("Helvetica", size=11)
-    
-    # Clean non-latin symbols for basic PDF rendering
-    clean_text = text_content.encode('latin-1', 'replace').decode('latin-1')
-    
-    for line in clean_text.split('\n'):
-        pdf.multi_cell(0, 8, txt=line)
-        
-    return bytes(pdf.output())
+                # Prepare PDF Download
+                pdf_data = create_pdf(response.text)
 
-# Display the output and provide download buttons
-st.success("Guide Generated Successfully!")
-st.markdown("---")
-st.markdown(response.text)
+                # Render Download Buttons Side-by-Side
+                col_dl1, col_dl2 = st.columns(2)
+                with col_dl1:
+                    st.download_button(
+                        label="📥 Download as PDF",
+                        data=pdf_data,
+                        file_name=f"{role_title.replace(' ', '_')}_Prep_Guide.pdf",
+                        mime="application/pdf",
+                        type="primary"
+                    )
 
-# Download Section
-pdf_data = create_pdf(response.text)
+                with col_dl2:
+                    st.download_button(
+                        label="📄 Download as Text / Markdown",
+                        data=response.text,
+                        file_name=f"{role_title.replace(' ', '_')}_Prep_Guide.md",
+                        mime="text/markdown"
+                    )
 
-col_dl1, col_dl2 = st.columns(2)
-with col_dl1:
-    st.download_button(
-        label="📥 Download as PDF",
-        data=pdf_data,
-        file_name=f"{role_title.replace(' ', '_')}_Prep_Guide.pdf",
-        mime="application/pdf",
-        type="primary"
-    )
-
-with col_dl2:
-    st.download_button(
-        label="📄 Download as Text / Markdown",
-        data=response.text,
-        file_name=f"{role_title.replace(' ', '_')}_Prep_Guide.md",
-        mime="text/markdown"
-    )
-                
             except Exception as e:
                 st.error(f"Error generating guide: {str(e)}")
